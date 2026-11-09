@@ -1,0 +1,37 @@
+# ワークスペース（モデル・解析データ・ジョブ結果は Git 管理外）
+workspace/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# conda / venv
+.env
+.venv
+env/
+venv/
+
+# ログ
+*.log
+server.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 環境ロックファイル（必要なら管理してもよい）
+environment.lock.yml

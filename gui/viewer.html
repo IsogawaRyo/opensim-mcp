@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>OpenSim MCP Results Viewer</title>
+    <style>
+        :root {
+            --panel-bg: rgba(10, 17, 28, 0.9);
+            --panel-border: rgba(121, 143, 168, 0.24);
+            --panel-muted: #8ea1b6;
+            --panel-text: #ecf2f8;
+            --accent: #79c7b9;
+            --accent-2: #f2b94b;
+            --accent-3: #7aa8ff;
+            --accent-4: #98d56d;
+            --plot-bg: rgba(255, 255, 255, 0.03);
+        }
+
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top left, rgba(49, 78, 120, 0.35), transparent 38%),
+                radial-gradient(circle at bottom right, rgba(57, 112, 95, 0.28), transparent 32%),
+                #05080d;
+            color: var(--panel-text);
+            font-family: "SF Mono", "Menlo", monospace;
+        }
+
+        #panel {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            bottom: 14px;
+            width: 360px;
+            z-index: 100;
+            overflow-y: auto;
+            padding: 18px;
+            border-radius: 18px;
+            border: 1px solid var(--panel-border);
+            background: var(--panel-bg);
+            backdrop-filter: blur(18px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+        }
+
+        .viewport {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .subtitle {
+            margin-top: 6px;
+            color: var(--panel-muted);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .section {
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .section-title {
+            margin: 0 0 10px;
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--panel-muted);
+        }
+
+        .status-box, .meta-box {
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.04);
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            cursor: pointer;
+            border: none;
+            border-radius: 999px;
+            padding: 9px 14px;
+            color: #041018;
+            background: linear-gradient(135deg, #79c7b9, #9ae9d8);
+            font: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }
+
+        button.secondary {
+            color: var(--panel-text);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        button.active {
+            background: linear-gradient(135deg, #f2b94b, #ffd57a);
+        }
+
+        .timeline-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .timeline-value {
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent);
+        }
+
+        .hint {
+            margin-top: 8px;
+            color: var(--panel-muted);
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 11px;
+            color: var(--panel-muted);
+        }
+
+        select {
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--panel-text);
+            font: inherit;
+            font-size: 12px;
+        }
+
+        .plot {
+            width: 100%;
+            height: 160px;
+            display: block;
+            margin-top: 10px;
+            border-radius: 12px;
+            background: var(--plot-bg);
+        }
+    </style>
+</head>
+<body>
+    <aside id="panel">
+        <h1>OpenSim Results Viewer</h1>
+        <div class="subtitle">IK animation, inverse dynamics, and static optimization in one local GUI.</div>
+
+        <div class="section">
+            <div class="section-title">Status</div>
+            <div id="status" class="status-box">Initializing...</div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Scene</div>
+            <div class="button-row">
+                <button id="reloadModelBtn" type="button">Reload Model</button>
+                <button id="reloadResultsBtn" class="secondary" type="button">Reload Results</button>
+            </div>
+            <div class="meta-box" id="details" style="margin-top: 10px;"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">IK Playback</div>
+            <div class="timeline-head">
+                <span>Timeline</span>
+                <span id="currentTime" class="timeline-value">0.00 s</span>
+            </div>
+            <input type="range" id="timeSlider" min="0" max="0" step="1" value="0">
+            <div class="button-row" style="margin-top: 10px;">
+                <button id="playBtn" type="button">Play</button>
+                <button id="stopBtn" class="secondary" type="button">Stop</button>
+            </div>
+            <div class="hint" id="animationHint">Loading IK frames...</div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Inverse Dynamics</div>
+            <label for="idSelect">Column</label>
+            <select id="idSelect"></select>
+            <canvas id="idChart" class="plot"></canvas>
+            <div id="idMeta" class="hint"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Static Optimization Activation</div>
+            <label for="soActivationSelect">Column</label>
+            <select id="soActivationSelect"></select>
+            <canvas id="soActivationChart" class="plot"></canvas>
+            <div id="soActivationMeta" class="hint"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Static Optimization Force</div>
+            <label for="soForceSelect">Column</label>
+            <select id="soForceSelect"></select>
+            <canvas id="soForceChart" class="plot"></canvas>
+            <div id="soForceMeta" class="hint"></div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Display Options</div>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="showMarkersToggle" checked> Show Markers (Error Heatmap)
+            </label>
+        </div>
+    </aside>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from "three";
+        import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+        import { VTKLoader } from "three/addons/loaders/VTKLoader.js";
+
+        let scene;
+        let camera;
+        let renderer;
+        let controls;
+        let modelGroup;
+
+        const vtkLoader = new VTKLoader();
+        const appState = {
+            config: null,
+            animationFrames: [],
+            currentFrameIndex: 0,
+            isPlaying: false,
+            lastFrameTime: 0,
+            frameDelayMs: 17,
+            datasets: {},
+            markers: new Map(), // name -> mesh
+            markerErrors: null,
+            showMarkers: true,
+        };
+
+        const datasetConfigs = {
+            id: {
+                fileKey: "id_path",
+                selectId: "idSelect",
+                canvasId: "idChart",
+                metaId: "idMeta",
+                preferredColumns: ["hip_flexion_r_moment", "knee_angle_r_moment"],
+                color: "#f2b94b",
+            },
+            soActivation: {
+                fileKey: "so_activation_path",
+                selectId: "soActivationSelect",
+                canvasId: "soActivationChart",
+                metaId: "soActivationMeta",
+                preferredColumns: ["soleus_r", "glmax1_r"],
+                color: "#79c7b9",
+            },
+            soForce: {
+                fileKey: "so_force_path",
+                selectId: "soForceSelect",
+                canvasId: "soForceChart",
+                metaId: "soForceMeta",
+                preferredColumns: ["soleus_r", "glmax1_r"],
+                color: "#98d56d",
+            },
+        };
+
+        document.getElementById("reloadModelBtn").addEventListener("click", () => {
+            loadModel();
+        });
+        document.getElementById("reloadResultsBtn").addEventListener("click", () => {
+            loadResults();
+        });
+        document.getElementById("playBtn").addEventListener("click", togglePlay);
+        document.getElementById("stopBtn").addEventListener("click", stopAnimation);
+        document.getElementById("timeSlider").addEventListener("input", (event) => {
+            appState.currentFrameIndex = Number.parseInt(event.target.value, 10);
+            appState.isPlaying = false;
+            applyFrame(appState.currentFrameIndex);
+            updateAnimationUi();
+        });
+        document.getElementById("showMarkersToggle").addEventListener("change", (e) => {
+            appState.showMarkers = e.target.checked;
+            appState.markers.forEach(m => m.visible = appState.showMarkers);
+        });
+
+        window.addEventListener("resize", () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            redrawAllPlots();
+        });
+
+        boot();
+
+        async function boot() {
+            initScene();
+            animate();
+
+            try {
+                setStatus("Fetching viewer config...");
+                appState.config = await fetchJson("/api/config");
+                updateDetails();
+                await loadModel();
+                await loadAnimation();
+                await loadMarkerErrors();
+                await loadResults();
+                setStatus("Viewer ready.");
+            } catch (error) {
+                setStatus(`Initialization failed: ${error.message}`);
+                console.error(error);
+            }
+        }
+
+        function initScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x05080d);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
+            camera.position.set(1.85, 1.2, 1.75);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.domElement.className = "viewport";
+            document.body.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 0.95, 0);
+            controls.update();
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.68));
+
+            const keyLight = new THREE.DirectionalLight(0xffffff, 1.05);
+            keyLight.position.set(5, 9, 5);
+            scene.add(keyLight);
+
+            const fillLight = new THREE.DirectionalLight(0x94b6ff, 0.45);
+            fillLight.position.set(-5, 4, -5);
+            scene.add(fillLight);
+
+            const grid = new THREE.GridHelper(6, 60, 0x35506f, 0x1a2432);
+            scene.add(grid);
+
+            modelGroup = new THREE.Group();
+            scene.add(modelGroup);
+        }
+
+        function animate(now) {
+            requestAnimationFrame(animate);
+
+            if (appState.isPlaying && appState.animationFrames.length > 0) {
+                if (now - appState.lastFrameTime >= appState.frameDelayMs) {
+                    appState.currentFrameIndex = (appState.currentFrameIndex + 1) % appState.animationFrames.length;
+                    applyFrame(appState.currentFrameIndex);
+                    updateAnimationUi();
+                    appState.lastFrameTime = now;
+                }
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        async function loadModel() {
+            if (!appState.config.model_path) {
+                throw new Error("model_path is not configured");
+            }
+            setStatus("Loading base model pose...");
+            const model = await fetchJson(`/api/model/visual?model=${encodeURIComponent(appState.config.model_path)}`);
+            buildModel(model.bodies);
+            setStatus("Base model loaded.");
+        }
+
+        async function loadAnimation() {
+            if (!appState.config.ik_path) {
+                throw new Error("ik_path is not configured");
+            }
+            setStatus("Loading IK animation frames...");
+            const payload = await fetchJson(
+                `/api/model/frames?model=${encodeURIComponent(appState.config.model_path)}&motion=${encodeURIComponent(appState.config.ik_path)}`
+            );
+            appState.animationFrames = payload.frames;
+            appState.currentFrameIndex = 0;
+
+            if (payload.frames.length > 1) {
+                const dt = payload.frames[1].time - payload.frames[0].time;
+                appState.frameDelayMs = Math.max(16, Math.round(dt * 1000));
+            }
+
+            document.getElementById("timeSlider").max = String(Math.max(0, payload.frames.length - 1));
+            document.getElementById("animationHint").textContent = `${payload.motion_path} | ${payload.frame_count} frames`;
+            applyFrame(0);
+            updateAnimationUi();
+            setStatus("IK animation loaded.");
+        }
+
+        async function loadMarkerErrors() {
+            const errorPath = appState.config.marker_errors_path;
+            if (!errorPath) return;
+            try {
+                setStatus("Loading marker errors...");
+                appState.markerErrors = await fetchJson(`/api/model/marker_errors?path=${encodeURIComponent(errorPath)}`);
+                setStatus("Marker errors loaded.");
+            } catch (err) {
+                console.warn("Could not load marker errors:", err);
+                setStatus("IK loaded (no error data)");
+            }
+        }
+
+        async function loadResults() {
+            setStatus("Loading ID and SO result files...");
+            const tasks = Object.entries(datasetConfigs)
+                .filter(([, config]) => Boolean(appState.config[config.fileKey]))
+                .map(([key, config]) => loadDataset(key, config));
+            await Promise.all(tasks);
+            redrawAllPlots();
+            setStatus("ID and SO plots loaded.");
+        }
+
+        async function loadDataset(key, config) {
+            const path = appState.config[config.fileKey];
+            if (!path) {
+                const select = document.getElementById(config.selectId);
+                select.innerHTML = "";
+                document.getElementById(config.metaId).textContent = "not configured";
+                return;
+            }
+            const dataset = await fetchJson(`/api/timeseries?path=${encodeURIComponent(path)}`);
+            appState.datasets[key] = dataset;
+
+            const select = document.getElementById(config.selectId);
+            const existingValue = select.value;
+            select.innerHTML = "";
+
+            const columns = Object.keys(dataset.columns);
+            for (const column of columns) {
+                const option = document.createElement("option");
+                option.value = column;
+                option.textContent = column;
+                select.appendChild(option);
+            }
+
+            const preferred = config.preferredColumns.find((column) => columns.includes(column));
+            select.value = columns.includes(existingValue) ? existingValue : (preferred || columns[0] || "");
+            select.onchange = () => updateDatasetPlot(key);
+            updateDatasetPlot(key);
+        }
+
+        function buildModel(visualData) {
+            while (modelGroup.children.length > 0) {
+                modelGroup.remove(modelGroup.children[0]);
+            }
+
+            for (const body of visualData) {
+                const bodyGroup = new THREE.Group();
+                bodyGroup.name = body.name;
+                modelGroup.add(bodyGroup);
+
+                for (const geom of body.geometries) {
+                    vtkLoader.load(`Geometry/${geom.file}`, (geometry) => {
+                        geometry.computeVertexNormals();
+                        const mesh = new THREE.Mesh(
+                            geometry,
+                            new THREE.MeshPhongMaterial({
+                                color: 0xe8edf4,
+                                shininess: 28,
+                            })
+                        );
+                        mesh.scale.set(geom.scale[0], geom.scale[1], geom.scale[2]);
+                        bodyGroup.add(mesh);
+                    });
+                }
+
+                updateBodyPose(bodyGroup, body.position, body.rotation);
+
+                // マーカーの初期配置
+                for (const marker of body.markers) {
+                    const sphere = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.008, 16, 16),
+                        new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+                    );
+                    sphere.name = `marker_${marker.name}`;
+                    sphere.visible = appState.showMarkers;
+                    modelGroup.add(sphere);
+                    appState.markers.set(marker.name, sphere);
+                }
+            }
+        }
+
+        function applyFrame(index) {
+            const frame = appState.animationFrames[index];
+            if (!frame) {
+                return;
+            }
+
+            for (const bodyData of frame.bodies) {
+                const bodyGroup = modelGroup.children.find((child) => child.name === bodyData.name);
+                if (bodyGroup) {
+                    updateBodyPose(bodyGroup, bodyData.position, bodyData.rotation);
+                    
+                    // マーカーの位置更新とヒートマップ適用
+                    for (const markerData of bodyData.markers) {
+                        const sphere = appState.markers.get(markerData.name);
+                        if (sphere) {
+                            sphere.position.set(markerData.position[0], markerData.position[1], markerData.position[2]);
+                            
+                            // エラーに基づく色変更
+                            if (appState.markerErrors && appState.markerErrors.columns[markerData.name]) {
+                                const error = appState.markerErrors.columns[markerData.name][index] || 0;
+                                // RMS誤差(m) 1cm=0.01, 2cm=0.02
+                                if (error > 0.02) {
+                                    sphere.material.color.setHex(0xff0000); // 赤
+                                } else if (error > 0.01) {
+                                    sphere.material.color.setHex(0xffff00); // 黄
+                                } else {
+                                    sphere.material.color.setHex(0x00ff00); // 緑
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function updateBodyPose(group, position, rotation) {
+            group.position.set(position[0], position[1], position[2]);
+            const transform = new THREE.Matrix4();
+            transform.set(
+                rotation[0][0], rotation[0][1], rotation[0][2], 0,
+                rotation[1][0], rotation[1][1], rotation[1][2], 0,
+                rotation[2][0], rotation[2][1], rotation[2][2], 0,
+                0, 0, 0, 1
+            );
+            group.setRotationFromMatrix(transform);
+        }
+
+        function togglePlay() {
+            if (!appState.animationFrames.length) {
+                return;
+            }
+            appState.isPlaying = !appState.isPlaying;
+            document.getElementById("playBtn").textContent = appState.isPlaying ? "Pause" : "Play";
+            document.getElementById("playBtn").classList.toggle("active", appState.isPlaying);
+        }
+
+        function stopAnimation() {
+            appState.isPlaying = false;
+            appState.currentFrameIndex = 0;
+            applyFrame(0);
+            updateAnimationUi();
+            document.getElementById("playBtn").textContent = "Play";
+            document.getElementById("playBtn").classList.remove("active");
+        }
+
+        function updateAnimationUi() {
+            document.getElementById("timeSlider").value = String(appState.currentFrameIndex);
+            const frame = appState.animationFrames[appState.currentFrameIndex];
+            if (frame) {
+                document.getElementById("currentTime").textContent = `${frame.time.toFixed(2)} s`;
+            }
+        }
+
+        function updateDatasetPlot(key) {
+            const config = datasetConfigs[key];
+            const dataset = appState.datasets[key];
+            if (!dataset) {
+                return;
+            }
+
+            const select = document.getElementById(config.selectId);
+            const column = select.value;
+            const values = dataset.columns[column] || [];
+            if (!column || !values.length) {
+                document.getElementById(config.metaId).textContent = `${dataset.path} | no plottable columns`;
+                return;
+            }
+
+            drawPlot(document.getElementById(config.canvasId), dataset.time, values, config.color, column);
+
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const last = values.length ? values[values.length - 1] : 0;
+            document.getElementById(config.metaId).textContent =
+                `${dataset.path} | ${column} | min ${formatNumber(min)} | max ${formatNumber(max)} | last ${formatNumber(last)}`;
+        }
+
+        function redrawAllPlots() {
+            for (const key of Object.keys(datasetConfigs)) {
+                updateDatasetPlot(key);
+            }
+        }
+
+        function drawPlot(canvas, times, values, color, label) {
+            const width = canvas.clientWidth || 320;
+            const height = canvas.clientHeight || 160;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = Math.floor(width * dpr);
+            canvas.height = Math.floor(height * dpr);
+
+            const ctx = canvas.getContext("2d");
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, width, height);
+
+            ctx.fillStyle = "rgba(255,255,255,0.03)";
+            ctx.fillRect(0, 0, width, height);
+
+            const padding = { left: 42, right: 12, top: 20, bottom: 24 };
+            const plotWidth = width - padding.left - padding.right;
+            const plotHeight = height - padding.top - padding.bottom;
+
+            if (!times.length || !values.length) {
+                ctx.fillStyle = "#8ea1b6";
+                ctx.fillText("No data", 12, 22);
+                return;
+            }
+
+            let min = Math.min(...values);
+            let max = Math.max(...values);
+            if (min === max) {
+                const pad = Math.abs(min) > 0 ? Math.abs(min) * 0.1 : 1;
+                min -= pad;
+                max += pad;
+            }
+
+            const timeEnd = times[times.length - 1];
+            const timeSpan = timeEnd - timeStart || 1;
+            const valueSpan = max - min || 1;
+
+            // SO Activation 特有の診断: 1.0(飽和)を超えているかチェック
+            const isSOActivation = label.includes('activation') || canvas.id.includes('soActivation');
+            if (isSOActivation && max >= 0.99) {
+                ctx.fillStyle = "rgba(255, 0, 0, 0.1)";
+                const ySat = padding.top + (1 - (1.0 - min) / valueSpan) * plotHeight;
+                ctx.fillRect(padding.left, ySat - 2, plotWidth, 4);
+                ctx.fillStyle = "#ff4444";
+                ctx.fillText("SATURATED (MAX)", padding.left + 5, ySat - 5);
+            }
+
+            ctx.strokeStyle = "rgba(255,255,255,0.08)";
+            ctx.lineWidth = 1;
+            for (let row = 0; row <= 3; row += 1) {
+                const y = padding.top + (plotHeight * row) / 3;
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+            }
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.75;
+            ctx.beginPath();
+            values.forEach((value, index) => {
+                const x = padding.left + ((times[index] - timeStart) / timeSpan) * plotWidth;
+                const y = padding.top + (1 - (value - min) / valueSpan) * plotHeight;
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+
+            ctx.fillStyle = "#ecf2f8";
+            ctx.font = "11px SF Mono, Menlo, monospace";
+            ctx.fillText(label, 10, 14);
+            ctx.fillStyle = "#8ea1b6";
+            ctx.fillText(formatNumber(max), 8, padding.top + 4);
+            ctx.fillText(formatNumber(min), 8, height - padding.bottom + 4);
+            ctx.fillText(`${timeStart.toFixed(2)} s`, padding.left, height - 6);
+
+            const endLabel = `${timeEnd.toFixed(2)} s`;
+            const endWidth = ctx.measureText(endLabel).width;
+            ctx.fillText(endLabel, width - padding.right - endWidth, height - 6);
+        }
+
+        async function fetchJson(url) {
+            const response = await fetch(url);
+            if (!response.ok) {
+                let message = `${response.status}`;
+                try {
+                    const payload = await response.json();
+                    message = payload.error || message;
+                } catch (_error) {
+                    message = `${response.status}`;
+                }
+                throw new Error(message);
+            }
+            return response.json();
+        }
+
+        function setStatus(message) {
+            document.getElementById("status").textContent = message;
+        }
+
+        function updateDetails() {
+            const details = [
+                `Session: ${appState.config.session_name || "n/a"}`,
+                `Source: ${appState.config.session_source || "n/a"}`,
+                `Model: ${appState.config.model_path}`,
+                `IK: ${appState.config.ik_path}`,
+                `Marker errors: ${appState.config.marker_errors_path || "n/a"}`,
+                `ID: ${appState.config.id_path}`,
+                `SO activation: ${appState.config.so_activation_path}`,
+                `SO force: ${appState.config.so_force_path}`,
+            ];
+            document.getElementById("details").innerHTML = details.join("<br>");
+        }
+
+        function formatNumber(value) {
+            if (!Number.isFinite(value)) {
+                return "n/a";
+            }
+            const abs = Math.abs(value);
+            if (abs >= 1000 || (abs > 0 && abs < 0.01)) {
+                return value.toExponential(2);
+            }
+            return value.toFixed(2);
+        }
+    </script>
+</body>
+</html>
